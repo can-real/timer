@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20:00 - Eye Break Timer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0f19;
+      color: #f8fafc;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2.5rem;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      width: 320px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.35rem 1rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+    }
+    .work-mode { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }
+    .rest-mode { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+    #display {
+      font-size: 4.5rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 1.5rem;
+    }
+    .btn {
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn:hover { background: #4338ca; }
+    .btn:active { transform: scale(0.98); }
+    .btn-stop { background: #dc2626; }
+    .btn-stop:hover { background: #b91c1c; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div id="statusBadge" class="badge work-mode">Work Mode</div>
+    <div id="display">20:00</div>
+    <button id="toggleBtn" class="btn">Start Timer</button>
+  </div>
+
+  <script>
+    const WORK_TIME = 20 * 60; // 20 minutes (in seconds)
+    const REST_TIME = 20;      // 20 seconds
+
+    let isWorking = true;
+    let timeLeft = WORK_TIME;
+    let timerId = null;
+
+    const display = document.getElementById("display");
+    const statusBadge = document.getElementById("statusBadge");
+    const toggleBtn = document.getElementById("toggleBtn");
+
+    // 1. Play synthesized chime using Web Audio API
+    function playBeep(frequency = 587.33, duration = 0.4) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency; // D5 tone
+
+        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+      } catch (err) {
+        console.warn("Audio Context blocked or unsupported:", err);
+      }
+    }
+
+    // 2. Request system notification permission on startup
+    function requestNotificationPermission() {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+
+    // 3. Send OS desktop push notification
+    function sendNotification(title, body) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, silent: true });
+      }
+    }
+
+    // 4. Format seconds into MM:SS format
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    // 5. Timer tick handler
+    function tick() {
+      if (timeLeft > 0) {
+        timeLeft--;
+        const formatted = formatTime(timeLeft);
+        display.innerText = formatted;
+        document.title = `${formatted} - ${isWorking ? "Focusing" : "Rest Eyes!"}`;
+      } else {
+        // Toggle state when timer hits 0
+        if (isWorking) {
+          isWorking = false;
+          timeLeft = REST_TIME;
+          statusBadge.innerText = "Rest Mode";
+          statusBadge.className = "badge rest-mode";
+          
+          playBeep(659.25, 0.6); // Higher alert tone
+          sendNotification("👀 Time for an Eye Break!", "Look at an object 20 feet away for 20 seconds.");
+        } else {
+          isWorking = true;
+          timeLeft = WORK_TIME;
+          statusBadge.innerText = "Work Mode";
+          statusBadge.className = "badge work-mode";
+          
+          playBeep(440.00, 0.4); // Standard resume tone
+          sendNotification("💻 Back to Work", "20-minute focus session started.");
+        }
+      }
+    }
+
+    // 6. Start / Pause toggle
+    toggleBtn.addEventListener("click", () => {
+      requestNotificationPermission();
+
+      if (timerId === null) {
+        timerId = setInterval(tick, 1000);
+        toggleBtn.innerText = "Pause Timer";
+        toggleBtn.classList.add("btn-stop");
+      } else {
+        clearInterval(timerId);
+        timerId = null;
+        toggleBtn.innerText = "Resume Timer";
+        toggleBtn.classList.remove("btn-stop");
+      }
+    });
+  </script>
+</body>
+</html>
